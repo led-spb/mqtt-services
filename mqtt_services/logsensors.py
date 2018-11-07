@@ -16,8 +16,8 @@ def on_mqtt_connect(client, userdata, flags, rc):
 def main():
     class LoadFromFile( argparse.Action ):
         def __call__ (self, parser, namespace, values, option_string = None):
-           with values as f:
-               parser.parse_args( shlex.split(f.read()), namespace )
+            with values as f:
+                parser.parse_args( shlex.split(f.read()), namespace )
 
     parser = argparse.ArgumentParser( fromfile_prefix_chars='@' )
     parser.add_argument( "-c", "--config", type=open, action=LoadFromFile, help="Load config from file" )
@@ -51,11 +51,11 @@ def main():
         sensor_state = None
         match = args.on.match( line )
         if match is not None:
-           sensor_state = 1
+            sensor_state = 1
         else:
-           match = args.off.match( line )
-           if match is not None:
-              sensor_state = 0
+            match = args.off.match( line )
+            if match is not None:
+                sensor_state = 0
 
         if match is not None:
            sensor = match.group('sensor')
@@ -65,25 +65,28 @@ def main():
                mqttc.publish( args.prefix+sensor, sensor_state )
            pass
 
-    f = open(args.input ,"r")
-    if args.all:
-        for line in f.readlines():
-            parse_log_line(line.strip())
-    f.read()
 
-    watcher = inotify.adapters.Inotify()
-    watcher.add_watch( args.input, mask = inotify.constants.IN_MODIFY | inotify.constants.IN_CREATE )
+    while True:
+        f = open(args.input ,"r")
+        if args.all:
+            for line in f.readlines():
+                parse_log_line(line.strip())
+        f.read()
 
-    for event in watcher.event_gen(yield_nones=False):
-        (_, type_names, path, filename) = event
-        if 'IN_CREATE' in type_names:
-            f = open(args.input, "r")
+        watcher = inotify.adapters.Inotify()
+        watcher.add_watch( args.input, mask = inotify.constants.IN_MODIFY | inotify.constants.IN_MOVE_SELF )
 
-        if 'IN_MODIFY' in type_names:
-            changed_data = f.read()
-            for line in changed_data.strip().split("\n"):
-                parse_log_line( line.strip() )
-    pass
+        for event in watcher.event_gen(yield_nones=False):
+            (_, type_names, path, filename) = event
+            if 'IN_MOVE_SELF' in type_names:
+                break
+
+            if 'IN_MODIFY' in type_names:
+                changed_data = f.read()
+                for line in changed_data.strip().split("\n"):
+                    parse_log_line( line.strip() )
+        f.close()
+        pass
 
 if __name__=="__main__":
     main()
