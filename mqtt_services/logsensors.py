@@ -41,7 +41,7 @@ class Feed(object):
         self.states[topic] = state
         logging.info("Sensor %s changed state to %d" % (topic, state))
         if self.mqttc is not None:
-            self.mqttc.notify(topic, state)
+            self.mqttc.publish(topic, state)
         pass
 
     def process(self):
@@ -84,6 +84,10 @@ class Application(object):
         logging.info("Connection to MQTT broker: %s", mqtt.connack_string(rc))
         pass
 
+    def publish(self, topic, state):
+        self.mqttc.publish(topic, state)
+     
+
     def load_config(self):
         parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
         parser.add_argument("-c", "--config", type=file, help="Load config from file")
@@ -94,7 +98,7 @@ class Application(object):
 
         args = parser.parse_args()
 
-        self.config = {'url': 'mqtt://localhost:1883', 'logfile': None, 'input': []}
+        self.config = {'url': 'mqtt://localhost:1883', 'logfile': None, 'input': [], 'debug': False}
         self.config.update(yaml.load(args.config, yaml.Loader))
         self.config.update({k: v for k, v in vars(args).items() if v})
 
