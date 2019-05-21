@@ -1,17 +1,16 @@
 #!/usr/bin/python
 import setuptools
 
-                     
 
 setuptools.setup(
     name="mqtt_services",
-    version="0.0.1",
+    version="0.1.0",
     author="Alexey Ponimash",
     author_email="alexey.ponimash@gmail.com",
     description="MQTT Services",
     long_description="",
     long_description_content_type="text/markdown",
-    url="https://github.com/led-spb",
+    url="https://github.com/led-spb/mqtt-services",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",

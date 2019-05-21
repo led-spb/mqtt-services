@@ -1,92 +1,146 @@
 import logging
 import argparse
 import paho.mqtt.client as mqtt
-import shlex
 import urlparse
 import inotify.adapters
 import inotify.constants
 import re
-
-sensors_dict = {}
-
-def on_mqtt_connect(client, userdata, flags, rc):
-    logging.info("Connection to MQTT broker: %s", mqtt.connack_string(rc) )
-    pass
-
-def main():
-    class LoadFromFile( argparse.Action ):
-        def __call__ (self, parser, namespace, values, option_string = None):
-            with values as f:
-                parser.parse_args( shlex.split(f.read()), namespace )
-
-    parser = argparse.ArgumentParser( fromfile_prefix_chars='@' )
-    parser.add_argument( "-c", "--config", type=open, action=LoadFromFile, help="Load config from file" )
-    parser.add_argument( "-u", "--url", default="mqtt://localhost:1883", type=urlparse.urlparse )
-    parser.add_argument( "--prefix", default="/logsensors" )
-
-    parser.add_argument( "--all", action="store_true", default=False)
-    parser.add_argument( "-i", "--input" )
-    parser.add_argument( "--on", type=re.compile )
-    parser.add_argument( "--off", type=re.compile )
-
-    parser.add_argument( "-v", action="store_true", default=False, help="Verbose logging", dest="verbose" )
-    parser.add_argument( "--logfile", help="Logging into file" )
-    args = parser.parse_args()
-
-    # configure logging
-    logging.basicConfig(format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",  level= logging.DEBUG if args.verbose else logging.INFO, filename=args.logfile )
-    # mqtt broker
-    logging.debug("Trying connect to MQTT broker at %s:%d" % (args.url.hostname, args.url.port) )
-
-    mqttc = mqtt.Client()
-    if args.url.username!=None:
-        mqttc.username_pw_set( args.url.username, args.url.password )
-    mqttc.on_connect = on_mqtt_connect
-    mqttc.connect( args.url.hostname, args.url.port if args.url.port!=None else 1883, 60 )
-    mqttc.loop_start()
-
-    def parse_log_line( line ):
-        logging.debug( line )
-
-        sensor_state = None
-        match = args.on.match( line )
-        if match is not None:
-            sensor_state = 1
-        else:
-            match = args.off.match( line )
-            if match is not None:
-                sensor_state = 0
-
-        if match is not None:
-           sensor = match.group('sensor')
-           if sensor not in sensors_dict or sensors_dict[sensor] != sensor_state:
-               sensors_dict[sensor] = sensor_state
-               logging.info("Sensor %s changed state to %d" % (sensor, sensor_state) )
-               mqttc.publish( args.prefix+sensor, sensor_state )
-           pass
+import yaml
+import json
 
 
-    while True:
-        f = open(args.input ,"r")
-        if args.all:
-            for line in f.readlines():
-                parse_log_line(line.strip())
-        f.read()
-
-        watcher = inotify.adapters.Inotify()
-        watcher.add_watch( args.input, mask = inotify.constants.IN_MODIFY | inotify.constants.IN_MOVE_SELF )
-
-        for event in watcher.event_gen(yield_nones=False):
-            (_, type_names, path, filename) = event
-            if 'IN_MOVE_SELF' in type_names:
-                break
-
-            if 'IN_MODIFY' in type_names:
-                changed_data = f.read()
-                for line in changed_data.strip().split("\n"):
-                    parse_log_line( line.strip() )
-        f.close()
+class Feed(object):
+    def __init__(self, file, topic, states, mqttc, watcher):
+        self.file = file
+        self.topic = topic
+        self.templates = {state: re.compile(regexp) for state, regexp in states.items()}
+        self.fd = None
+        self.wd = None
+        self.states = {}
+        self.mqttc = mqttc
+        self.watcher = watcher
         pass
 
-if __name__=="__main__":
+    def reopen(self):
+        if self.fd is not None:
+            self.fd.close()
+        self.fd = open(self.file, "r")
+
+        if self.watcher is None:
+            return
+
+        if self.wd is not None:
+            self.watcher.remove_watch_with_id(self.wd)
+
+        self.wd = self.watcher.add_watch(
+            self.file,
+            mask=inotify.constants.IN_MODIFY | inotify.constants.IN_MOVE_SELF
+        )
+
+    def trigger(self, topic, state):
+        self.states[topic] = state
+        logging.info("Sensor %s changed state to %d" % (topic, state))
+        if self.mqttc is not None:
+            self.mqttc.notify(topic, state)
+        pass
+
+    def process(self):
+        data = self.fd.read()
+        for line in data.strip().split("\n"):
+            self.process_line(line.strip())
+        pass
+
+    def process_line(self, line):
+        logging.debug(line)
+
+        for current_state, regexp in self.templates.items():
+            match = regexp.match(line)
+            if match is not None:
+                topic = match.expand(self.topic)
+                if self.states.get(topic) != current_state:
+                    self.states[topic] = current_state
+                    self.trigger(topic, current_state)
+        pass
+
+
+class Application(object):
+
+    def __init__(self):
+        self.config = {}
+        self.feeds = []
+        self.args = None
+        self.watcher = inotify.adapters.Inotify()
+
+        self.load_config()
+        logging.captureWarnings(True)
+        logging.basicConfig(
+            format=u'%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s',
+            level=logging.DEBUG if self.config['debug'] else logging.INFO,
+            filename=self.config['logfile']
+        )
+        logging.debug("Loaded configuration: %s", json.dumps(self.config, indent=2, skipkeys=True, default=str))
+
+    def on_mqtt_connect(self, client, userdata, flags, rc):
+        logging.info("Connection to MQTT broker: %s", mqtt.connack_string(rc))
+        pass
+
+    def load_config(self):
+        parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
+        parser.add_argument("-c", "--config", type=file, help="Load config from file")
+        parser.add_argument("--url")
+        parser.add_argument("--all", action="store_true", default=False)
+        parser.add_argument("-v", action="store_true", help="Verbose logging", dest="debug")
+        parser.add_argument("--logfile", help="Logging into file")
+
+        args = parser.parse_args()
+
+        self.config = {'url': 'mqtt://localhost:1883', 'logfile': None, 'input': []}
+        self.config.update(yaml.load(args.config, yaml.Loader))
+        self.config.update({k: v for k, v in vars(args).items() if v})
+
+        self.feeds = [Feed(mqttc=self, watcher=self.watcher, **x) for x in self.config['input']]
+
+    def get_feed_by_watch(self, wd):
+        for feed in self.feeds:
+            if feed.wd == wd:
+                return feed
+
+    def run(self):
+        url = urlparse.urlparse(self.config['url'])
+
+        logging.info("Trying connect to MQTT broker at %s:%d" % (url.hostname, url.port))
+        self.mqttc = mqtt.Client()
+
+        if url.username is not None:
+            self.mqttc.username_pw_set(url.username, url.password)
+
+        self.mqttc.on_connect = self.on_mqtt_connect
+        self.mqttc.connect(url.hostname, url.port if url.port is not None else 1883, 60)
+        self.mqttc.loop_start()
+
+        for feed in self.feeds:
+            feed.reopen()
+            if self.config.get('all', False):
+                feed.process()
+            feed.fd.read()
+
+        # Wait and process inotify events
+        while True and self.watcher:
+            for event in self.watcher.event_gen(yield_nones=False):
+                (header, type_names, path, filename) = event
+                feed = self.get_feed_by_watch(header.wd)
+                if feed is not None:
+                    if 'IN_MOVE_SELF' in type_names:
+                        feed.reopen()
+                    if 'IN_MODIFY' in type_names:
+                        feed.process()
+    pass
+
+
+def main():
+    app = Application()
+    app.run()
+
+
+if __name__ == "__main__":
     main()
