@@ -4,7 +4,7 @@ import setuptools
 
 setuptools.setup(
     name="mqtt_services",
-    version="0.1.0",
+    version="0.1.1",
     author="Alexey Ponimash",
     author_email="alexey.ponimash@gmail.com",
     description="MQTT Services",

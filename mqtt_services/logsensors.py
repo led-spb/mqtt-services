@@ -7,6 +7,7 @@ import inotify.constants
 import re
 import yaml
 import json
+import time
 
 
 class Feed(object):
@@ -117,11 +118,13 @@ class Application(object):
         self.mqttc.on_connect = self.on_mqtt_connect
         self.mqttc.connect(url.hostname, url.port if url.port is not None else 1883, 60)
         self.mqttc.loop_start()
+        time.sleep(1)
 
         for feed in self.feeds:
             feed.reopen()
             if self.config.get('all', False):
                 feed.process()
+            # Move to the end of the file
             feed.fd.read()
 
         # Wait and process inotify events
