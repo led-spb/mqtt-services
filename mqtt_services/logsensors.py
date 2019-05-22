@@ -26,22 +26,18 @@ class Feed(object):
             self.fd.close()
         self.fd = open(self.file, "r")
 
-        if self.watcher is None:
-            return
-
-        if self.wd is not None:
-            self.watcher.remove_watch_with_id(self.wd)
-
-        self.wd = self.watcher.add_watch(
-            self.file,
-            mask=inotify.constants.IN_MODIFY | inotify.constants.IN_MOVE_SELF
-        )
+        if self.wd is None:
+            self.wd = self.watcher.add_watch(
+                self.file,
+                mask=inotify.constants.IN_MODIFY # | inotify.constants.IN_MOVE_SELF
+            )
+        pass
 
     def trigger(self, topic, state):
         self.states[topic] = state
         logging.info("Sensor %s changed state to %d" % (topic, state))
         if self.mqttc is not None:
-            self.mqttc.publish(topic, state)
+            self.mqttc.publish(topic, int(state))
         pass
 
     def process(self):
@@ -85,8 +81,8 @@ class Application(object):
         pass
 
     def publish(self, topic, state):
+        logging.debug("Publishing state %d to MQTT topic %s", state, topic)
         self.mqttc.publish(topic, state)
-     
 
     def load_config(self):
         parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
