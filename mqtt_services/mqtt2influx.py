@@ -11,6 +11,7 @@ from influxdb import InfluxDBClient
 
 client_id = "MQTT2Infux_%d-%s" % (os.getpid(), socket.getfqdn())
 
+
 def is_number(s):
     try:
         float(s)
@@ -20,8 +21,8 @@ def is_number(s):
 
 
 def on_connect(client, userdata, flags, rc):
-    logging.info("Connection to broker: %s", mqtt.connack_string(rc) )
-    if rc==0:
+    logging.info("Connection to broker: %s", mqtt.connack_string(rc))
+    if rc == 0:
         client.publish("/clients/" + client_id, "Online")
         map = userdata['map']
         for topic in map:
@@ -30,10 +31,10 @@ def on_connect(client, userdata, flags, rc):
 
 
 def on_message(mqttc, userdata, msg):
-    logging.debug( "New message from %s" % msg.topic )
-    client   = userdata['client']
+    logging.debug("New message from %s" % msg.topic)
+    client = userdata['client']
     database = userdata['database']
-    map      = userdata['map']
+    map = userdata['map']
 
     lines = []
     now = int(time.time())
@@ -45,88 +46,91 @@ def on_message(mqttc, userdata, msg):
                 carbonkey = msg.topic.replace('/', '.')
             else:
                 carbonkey = remap.replace('/', '.')
-            carbonkey=carbonkey.strip('.')
+            carbonkey = carbonkey.strip('.')
 
-            values={}
+            values = {}
             # try to decode payload as json
             try:
-              st = json.loads(msg.payload)
-              for k in st:
-                  if is_number(st[k]):
-                     values[k] = float(st[k])
+                st = json.loads(msg.payload)
+                for k in st:
+                    if is_number(st[k]):
+                        values[k] = float(st[k])
             except:
-              # Try to decode payload as number
-              try:
-                  values['value'] = float(msg.payload)
-              except ValueError:
-                  logging.debug("Topic %s contains payload [%s] as unknown data format" %  (msg.topic, msg.payload))
-                  return
+                # Try to decode payload as number
+                try:
+                    values['value'] = float(msg.payload)
+                except ValueError:
+                    logging.debug("Topic %s contains payload [%s] as unknown data format" % (msg.topic, msg.payload))
+                    return
 
-            points=[ {'measurement': carbonkey, 'fields': values } ]
-            logging.debug(  "Write to influx %s", json.dumps(points, indent=2) )
+            points = [{'measurement': carbonkey, 'fields': values}]
+            logging.debug("Write to influx %s", json.dumps(points, indent=2))
             try:
-               client.write_points( points, database=database )
+                client.write_points(points, database=database)
             except:
-               logging.exception("Error while write data to influxdb")
+                logging.exception("Error while write data to influxdb")
 
- 
+
 def on_disconnect(mosq, userdata, rc):
     if rc == 0:
         logging.info("Clean disconnection")
     else:
-        logging.info("Unexpected disconnect (%s); reconnecting in 5 seconds", paho.connack_string(rc) )
+        logging.info("Unexpected disconnect (%s); reconnecting in 5 seconds", paho.connack_string(rc))
         time.sleep(5)
 
 
 def main():
-    class LoadFromFile( argparse.Action ):
-        def __call__ (self, parser, namespace, values, option_string = None):
-           with values as f:
-               parser.parse_args(f.read().split(), namespace)
+    class LoadFromFile(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            with values as f:
+                parser.parse_args(f.read().split(), namespace)
 
-    parser = argparse.ArgumentParser( fromfile_prefix_chars='@' )
-    parser.add_argument( "-c", "--config", type=open, action=LoadFromFile, help="Load config from file" )
-    parser.add_argument( "--mqtt", default="mqtt://localhost:1883", type=urlparse.urlparse )
-    parser.add_argument( "--database", default="home" )
+    parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
+    parser.add_argument("-c", "--config", type=open, action=LoadFromFile, help="Load config from file")
+    parser.add_argument("--mqtt", default="mqtt://localhost:1883", type=urlparse.urlparse)
+    parser.add_argument("--database", default="home")
 
-    parser.add_argument( "-m", action="append", nargs="*", dest="map" )
-    parser.add_argument( "-v", action="store_true", default=False, help="Verbose logging", dest="verbose" )
-    parser.add_argument( "--logfile", help="Logging into file" )
+    parser.add_argument("-m", action="append", nargs="*", dest="map")
+    parser.add_argument("-v", action="store_true", default=False, help="Verbose logging", dest="verbose")
+    parser.add_argument("--logfile", help="Logging into file")
     args = parser.parse_args()
 
     # configure logging
-    logging.basicConfig(format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",  level=logging.DEBUG if args.verbose else logging.INFO, filename=args.logfile )
+    logging.basicConfig(format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+                        level=logging.DEBUG if args.verbose else logging.INFO, filename=args.logfile)
 
     map = {}
     for item in args.map:
         topic = item[0]
-        remap = None if len(item)==1 else item[1]
+        remap = None if len(item) == 1 else item[1]
         map[topic] = (remap)
 
-    influx_client = InfluxDBClient(host='localhost',port=8086, database=args.database)
+    influx_client = InfluxDBClient(host='localhost', port=8086, database=args.database)
     try:
-      influx_client.create_database(args.database)
+        influx_client.create_database(args.database)
     except:
-       logging.exception('Create database error')
+        logging.exception('Create database error')
     userdata = {
-        'client' : influx_client,
+        'client': influx_client,
         'database': args.database,
-        'map'    : map,
+        'map': map,
     }
     influx_client.switch_database(args.database)
-  
-    logging.debug("trying to connect to MQTT broker at %s:%d" % (args.mqtt.hostname, 1883 if args.mqtt.port==None else args.mqtt.port))
+
+    logging.debug("trying to connect to MQTT broker at %s:%d" % (
+    args.mqtt.hostname, 1883 if args.mqtt.port == None else args.mqtt.port))
     mqttc = mqtt.Client(client_id, clean_session=True, userdata=userdata)
 
-    if args.mqtt.username!=None:
-       mqttc.username_pw_set(args.mqtt.username, args.mqtt.password )
+    if args.mqtt.username != None:
+        mqttc.username_pw_set(args.mqtt.username, args.mqtt.password)
 
     mqttc.on_message = on_message
     mqttc.on_connect = on_connect
     mqttc.on_disconnect = on_disconnect
 
-    mqttc.connect(args.mqtt.hostname, 1883 if args.mqtt.port==None else args.mqtt.port , 60)
+    mqttc.connect(args.mqtt.hostname, 1883 if args.mqtt.port == None else args.mqtt.port, 60)
     mqttc.loop_forever()
+
 
 if __name__ == '__main__':
     main()
