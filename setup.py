@@ -4,7 +4,7 @@ import setuptools
 
 setuptools.setup(
     name="mqtt_services",
-    version="0.1.1",
+    version="0.2.0",
     author="Alexey Ponimash",
     author_email="alexey.ponimash@gmail.com",
     description="MQTT Services",
@@ -12,15 +12,11 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/led-spb/mqtt-services",
     packages=setuptools.find_packages(),
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-    ],
+    classifiers=[],
     install_requires=[
        'requests>=2.10.0',
        'inotify', 
-       'paho_mqtt', 
+       'paho_mqtt',
        'RPi.GPIO',
        'jinja2',
        'influxdb'
@@ -32,6 +28,7 @@ setuptools.setup(
             'mqtt2influx = mqtt_services.mqtt2influx:main',
             'gpiosensors = mqtt_services.gpiosensors:main',
             'logsensors = mqtt_services.logsensors:main',
+            'lgtv = mqtt_services.lgtv:main'
        ]
     },
 )
