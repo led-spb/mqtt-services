@@ -1,10 +1,11 @@
 #!/usr/bin/python
 import setuptools
+import mqtt_services as module
 
 
 setuptools.setup(
-    name="mqtt_services",
-    version="0.2.0",
+    name=module.name,
+    version=module.version,
     author="Alexey Ponimash",
     author_email="alexey.ponimash@gmail.com",
     description="MQTT Services",

@@ -7,9 +7,8 @@ import urlparse
 
 try:
     import RPIO as GPIO
-except ImportError:
+except StandardError:
     import RPi.GPIO as GPIO
-
     GPIO.setmode(GPIO.BCM)
 
 
@@ -38,6 +37,7 @@ def main():
     parser.add_argument("--auth")
     parser.add_argument("--sensor", nargs="+", help="GPIO sensors, format: name/pin/pull/normal[/timeout=30]", type=str,
                         dest="sensors")
+    parser.add_argument("--prefix", default="sensors")
     parser.add_argument("-v", action="store_true", default=False, help="Verbose logging", dest="verbose")
     parser.add_argument("--logfile", help="Logging into file")
     args = parser.parse_args()
@@ -75,7 +75,7 @@ def main():
         sensor.changed = time.time()
 
         logging.info("Register sensor %s(GPIO%d), state: %d", sensor.name, sensor.pin, sensor.status)
-        mqttc.publish('/home/sensor/%s' % sensor.name, 1 if sensor.isAlert() else 0, retain=True)
+        mqttc.publish('%s/%s' % (args.prefix, sensor.name), 1 if sensor.isAlert() else 0, retain=True)
 
     # Listen for changes
     while True:
