@@ -91,7 +91,7 @@ def main():
                     sensor.changed = now
 
                     logging.info("Sensor %s(GPIO%d) changed state: %d", sensor.name, sensor.pin, sensor.status)
-                    mqttc.publish('/home/sensor/%s' % sensor.name, 1 if sensor.isAlert() else 0, retain=True)
+                    mqttc.publish('%s/%s' % (args.prefix, sensor.name), 1 if sensor.isAlert() else 0, retain=True)
 
         time.sleep(0.1)
 
