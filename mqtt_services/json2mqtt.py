@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -
 import requests
-import json
 import paho.mqtt.publish as publish
 import argparse
 import logging
@@ -31,10 +30,10 @@ def main():
     logging.basicConfig(format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
                         level=logging.DEBUG if args.verbose else logging.INFO, filename=args.logfile)
 
-    params = {'auth': None if args.mqtt.username == None else {'username': args.mqtt.username,
+    params = {'auth': None if args.mqtt.username is None else {'username': args.mqtt.username,
                                                                'password': args.mqtt.password},
               'hostname': args.mqtt.hostname,
-              'port': 1883 if args.mqtt.port == None else args.mqtt.port,
+              'port': 1883 if args.mqtt.port is None else args.mqtt.port,
               'retain': args.retain}
 
     jinja = Environment(extensions=['jinja2.ext.do'])

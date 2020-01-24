@@ -4,6 +4,7 @@ import argparse
 import time
 import paho.mqtt.client as mqtt
 import urlparse
+import json
 
 try:
     import RPIO as GPIO
@@ -14,11 +15,19 @@ except StandardError:
 
 class Sensor:
     def __init__(self, data):
+        self.status = 0
+        self.changed = 0
         for key, val in data.iteritems():
             setattr(self, key, val)
 
     def isAlert(self):
         return self.status != self.normal
+
+    def json(self):
+        return {
+            "status": 1 if self.isAlert() else 0,
+            "changed": int(self.changed)
+        }
 
 
 def on_mqtt_connect(client, userdata, rc):
@@ -75,7 +84,7 @@ def main():
         sensor.changed = time.time()
 
         logging.info("Register sensor %s(GPIO%d), state: %d", sensor.name, sensor.pin, sensor.status)
-        mqttc.publish('%s/%s' % (args.prefix, sensor.name), 1 if sensor.isAlert() else 0, retain=True)
+        mqttc.publish('%s/%s' % (args.prefix, sensor.name), json.dumps(sensor.json()), retain=True)
 
     # Listen for changes
     while True:
@@ -91,7 +100,7 @@ def main():
                     sensor.changed = now
 
                     logging.info("Sensor %s(GPIO%d) changed state: %d", sensor.name, sensor.pin, sensor.status)
-                    mqttc.publish('%s/%s' % (args.prefix, sensor.name), 1 if sensor.isAlert() else 0, retain=True)
+                    mqttc.publish('%s/%s' % (args.prefix, sensor.name), json.dumps(sensor.json()), retain=True)
 
         time.sleep(0.1)
 
