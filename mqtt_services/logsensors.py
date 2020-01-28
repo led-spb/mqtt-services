@@ -30,7 +30,7 @@ class Feed(object):
         if self.wd is None:
             self.wd = self.watcher.add_watch(
                 self.file,
-                mask=inotify.constants.IN_MODIFY # | inotify.constants.IN_MOVE_SELF
+                mask=inotify.constants.IN_MODIFY  # | inotify.constants.IN_MOVE_SELF
             )
         pass
 
@@ -81,9 +81,9 @@ class Application(object):
         logging.info("Connection to MQTT broker: %s", mqtt.connack_string(rc))
         pass
 
-    def publish(self, topic, state):
-        logging.debug("Publishing state %d to MQTT topic %s", state, topic)
-        self.mqttc.publish(topic, state)
+    def publish(self, topic, state, retain=False):
+        logging.debug("Publishing state %s to MQTT topic %s", state, topic)
+        self.mqttc.publish(topic, state, retain)
 
     def load_config(self):
         parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
