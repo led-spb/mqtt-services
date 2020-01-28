@@ -38,7 +38,7 @@ class Feed(object):
         self.states[topic] = state
         logging.info("Sensor %s changed state to %d" % (topic, state))
         if self.mqttc is not None:
-            self.mqttc.publish(topic, json.dumps({"status": int(state), "changed": int(time.time())}))
+            self.mqttc.publish(topic, json.dumps({"status": int(state), "changed": int(time.time())}), retain=True)
         pass
 
     def process(self):
