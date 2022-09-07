@@ -11,7 +11,7 @@ import time
 
 
 class Feed(object):
-    def __init__(self, file, topic, states, mqttc, watcher):
+    def __init__(self, file, topic, states, mqttc, watcher, retain=False):
         self.file = file
         self.topic = topic
         self.templates = {state: re.compile(regexp) for state, regexp in states.items()}
@@ -20,6 +20,7 @@ class Feed(object):
         self.states = {}
         self.mqttc = mqttc
         self.watcher = watcher
+        self.retain = retain
         pass
 
     def reopen(self):
@@ -38,7 +39,7 @@ class Feed(object):
         self.states[topic] = state
         logging.info("Sensor %s changed state to %d" % (topic, state))
         if self.mqttc is not None:
-            self.mqttc.publish(topic, json.dumps({"status": int(state), "changed": int(time.time())}), retain=True)
+            self.mqttc.publish(topic, json.dumps({"status": int(state), "changed": int(time.time())}), retain=self.retain)
         pass
 
     def process(self):
@@ -83,7 +84,7 @@ class Application(object):
 
     def publish(self, topic, state, retain=False):
         logging.debug("Publishing state %s to MQTT topic %s", state, topic)
-        self.mqttc.publish(topic, state, retain)
+        self.mqttc.publish(topic, state, retain=retain)
 
     def load_config(self):
         parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
